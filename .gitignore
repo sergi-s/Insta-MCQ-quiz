@@ -162,8 +162,7 @@ cython_debug/
 
 faiss_index
 
-app*.py
-!app.py
+app3.py
 
 
 __pycache__/
