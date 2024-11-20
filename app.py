@@ -1,12 +1,22 @@
 import streamlit as st
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
+from langchain.schema import HumanMessage
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.chat_models import ChatOpenAI
+from langchain.embeddings import OpenAIEmbeddings
 import os
+import re
+import random
 
+#? Notes: 
+#? the faiss_index folder is used to store the embeddings of the text chunks, so that I dont need to calculate the embeddings every time I run the code. But this is for static testing purposes, in a real world scenario, the embeddings should be calculated every time, because the text chunks will be different every time.
+#? if you used an embeddings different than the one used to create the cashed faiss_index folder, you will get an error, because the embeddings are not the same. 
+
+
+static_testing = False
 api_key = os.getenv("OPENAI_API_KEY")
 
 
@@ -34,37 +44,38 @@ def get_text_chunks(text):
 
 def get_vectorstore(text_chunks):
     """Create a vector store from the text chunks."""
-    embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
+    # embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl") # this is soo slow
+    embeddings = OpenAIEmbeddings()
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
 
 
 def save_vectorstore(vectorstore, directory="faiss_index"):
     """Save the FAISS vectorstore to a directory."""
-    if not os.path.exists(directory):
+    if not os.path.exists(directory) and static_testing:
         os.makedirs(directory)
     vectorstore.save_local(directory)
     print(f"Vectorstore saved to {directory}")
 
 
 def load_vectorstore(directory="faiss_index"):
+    # this is for static testing purposes, in a real world scenario, the embeddings should be calculated every time, because the text chunks will be different every time.
     """Load the FAISS vectorstore from the directory."""
-    if os.path.exists(directory):
-        embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
+    if os.path.exists(directory) and static_testing:
+        # embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl") # this is soo slow
+        embeddings = OpenAIEmbeddings()
         vectorstore = FAISS.load_local(directory, embeddings=embeddings)
         print(f"Vectorstore loaded from {directory}")
         return vectorstore
     else:
         return None
 
-from langchain.schema import SystemMessage, HumanMessage
-import re
-
 
 def generate_mcq_question(chunk, vectorstore):
     """Generate a multiple-choice question based on the text chunk."""
 
     # Search for the most relevant passage from the vectorstore
+    # print(f"Searching for similar documents based on the text chunk: {len(chunk)}")
     similar_docs = vectorstore.similarity_search(chunk, k=3)
     context = "\n".join([doc.page_content for doc in similar_docs])
 
@@ -91,35 +102,14 @@ def generate_mcq_question(chunk, vectorstore):
         response = llm(messages)
         generated_content = response.content.strip()
         
-        print("generated_content")
-        print(generated_content)
-        print("Sergiiiiii")
-
         # Regex to extract question, options, and answer
         pattern = r"Question:\s*(.*?)\nA\.\s*(.*?)\nB\.\s*(.*?)\nC\.\s*(.*?)\nD\.\s*(.*?)\nCorrect Answer:\s*(.*)"
         match = re.search(pattern, generated_content, re.DOTALL)
-        
-        print("match")
-        print(match)
 
         if match:
             question = match.group(1).strip()
-            print("question")
-            print(question)
-            
             options = [match.group(i).strip() for i in range(2, 6)]
-            # options = {
-            #     'A': match.group(2).strip(),
-            #     'B': match.group(3).strip(),
-            #     'C': match.group(4).strip(),
-            #     'D': match.group(5).strip()
-            # }
-            print("options")
-            print(options)
             correct_answer = match.group(6).strip()
-            print("correct_answer")
-            print(correct_answer)
-
             return question, correct_answer[3:], options
         else:
             print("Error: Unable to parse the generated question format.")
@@ -147,8 +137,8 @@ def main():
 
     if "current_question" not in st.session_state:
         st.session_state.current_question = None
-    if "current_chunk" not in st.session_state:
-        st.session_state.current_chunk = None
+    if "text_chunks" not in st.session_state:
+        st.session_state.text_chunks = None
 
     st.header("Chat with multiple PDFs :books:")
     
@@ -163,18 +153,21 @@ def main():
 
                 # Split text into chunks
                 text_chunks = get_text_chunks(raw_text)
-
-                # Load or create the vector store
-                vectorstore = load_vectorstore()  # Try loading the vectorstore
-                if vectorstore is None:
-                    print("Creating a new vectorstore...")
-                    vectorstore = get_vectorstore(text_chunks)  # Create new vector store if not found
-                    save_vectorstore(vectorstore)  # Save the new vectorstore
+                st.session_state.text_chunks = text_chunks
                 
-                # Generate the first question based on the first chunk
-                st.session_state.current_chunk = text_chunks[1]  # Start with the first chunk
-                st.warning("st.session_state.current_chunk: " + st.session_state.current_chunk)
-                question, correct_answer, options = generate_mcq_question(st.session_state.current_chunk, vectorstore)
+                # Load or create the vector store
+                vectorstore = load_vectorstore()
+                if vectorstore is None:
+                    vectorstore = get_vectorstore(text_chunks)
+                    save_vectorstore(vectorstore)
+                    st.session_state.vectorstore = vectorstore
+                
+                # Generate the first question based on a random chunk
+                current_chunk = text_chunks[random.randint(0, len(text_chunks))]
+
+                
+                # st.warning("st.session_state.current_chunk: " + st.session_state.current_chunk)
+                question, correct_answer, options = generate_mcq_question(current_chunk, vectorstore)
                 print("question")
                 print(question)
                 st.session_state.current_question = (question, correct_answer, options)
@@ -196,9 +189,11 @@ def main():
             handle_userinput(user_answer, correct_answer)
             
         if st.button("Next"):
-            vectorstore = load_vectorstore()
-            st.session_state.current_question = generate_mcq_question(st.session_state.current_chunk, vectorstore)
-
+            with st.spinner("Loading next question..."):
+                current_chunk = random.choice(st.session_state.text_chunks)
+                st.session_state.current_question = generate_mcq_question(current_chunk, st.session_state.vectorstore)
+                st.experimental_rerun()
+            
             
 
 

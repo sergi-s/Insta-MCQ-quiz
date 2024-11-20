@@ -166,3 +166,5 @@ app3.py
 
 
 __pycache__/
+
+.DS_Store
