@@ -85,7 +85,7 @@ For a portfolio PDF uploaded by Sergi:
    - Implement batch processing for embedding generation.
 
 2. **Evaluation of Generated Questions**:
-    Implement metrics to assess the quality of the generated multiple-choice questions. These could include:
+    - Implement metrics to assess the quality of the generated multiple-choice questions. These could include:
         - Relevance: Measure how well the questions align with the original text chunk.
         - Coherence: Evaluate whether the questions and answer choices make logical sense and are clearly worded.
         - Difficulty: Use NLP techniques to gauge the complexity of the questions, ensuring a balance between easy, medium, and hard questions.
