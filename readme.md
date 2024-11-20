@@ -70,11 +70,13 @@ This project enables users to upload multiple PDF documents and generate interac
 
 **Example**: 
 ![Sergi Based Info](media/Sergi-Based-Info.jpeg)
-For a portfolio PDF uploaded by Sergi:
-- **Embedding-Based Question**: *"What is Sergi's core stack as a full-stack software engineer?"*
+
+**Example**:  
+From my personal portfolio **Sergi Rizkallah** [sergi-rizkallah.com](http://sergi-rizkallah.com)) as a PDF file and uploaded it to the application :  
+- **Embedding-Based Question**: *"What is Sergi's core stack as a full-stack software engineer?"*  
   - Options include specific skills from the document.
-- **Text-Based Question**: *"What machine learning model was used in the project 'Credit Card Fraud detection'?"*
-  - Options are general and may not relate to the uploaded PDF.
+- **Text-Based Question**: *"What machine learning model was used in the project 'Credit Card Fraud detection'?"*  
+  - Questions and Options are general and is not completely relevant to the uploaded PDF.
 
 ---
 
