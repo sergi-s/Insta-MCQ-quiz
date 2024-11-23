@@ -93,18 +93,14 @@ From my personal portfolio **Sergi Rizkallah** [sergi-rizkallah.com](http://serg
 
 ---
 
-Got it! You’ll need to set up an API key for OpenAI in order for the app to access OpenAI's services. This should be stored securely in a `.env` file to keep it private.
-
-Here’s how to modify your documentation to include this step:
-
----
-
 ## Setup Instructions
 
 To run this project locally, follow these steps:
 
 ### 1. Install Dependencies
-Make sure you have Python 3.7+ installed. Then, create a virtual environment (optional but recommended) and install the required libraries using the `requirements.txt` file:
+Make sure you have **Python 3.9** installed. If you're using a different Python version, you may encounter version conflicts that could result in errors during the installation of dependencies. It's highly recommended to use Python 3.9 to avoid these issues.
+
+Then, create a virtual environment (optional but recommended) and install the required libraries using the `requirements.txt` file:
 
 ```bash
 # Install virtual environment (optional)
