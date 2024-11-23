@@ -179,6 +179,8 @@ def main():
                     vectorstore = get_vectorstore(text_chunks)
                     save_vectorstore(vectorstore)
                     st.session_state.vectorstore = vectorstore
+                    
+                st.session_state.vectorstore = vectorstore
                 
                 current_chunk = text_chunks[random.randint(0, len(text_chunks)-1)]
                 question_embedding, correct_answer_embedding, options_embedding = generate_mcq_question_embedding(current_chunk, vectorstore)
@@ -209,7 +211,7 @@ def main():
             with st.spinner("Loading next question..."):
                 current_chunk = random.choice(st.session_state.text_chunks)
                 
-                st.session_state.current_question_embedding = generate_mcq_question_embedding(current_chunk, vectorstore)
+                st.session_state.current_question_embedding = generate_mcq_question_embedding(current_chunk, st.session_state.vectorstore)
                 st.session_state.current_question_text = generate_mcq_question_text(current_chunk)
                 
                     
