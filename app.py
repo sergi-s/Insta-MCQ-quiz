@@ -10,7 +10,12 @@ from langchain.embeddings import OpenAIEmbeddings
 import os
 import re
 import random
+import time
 
+# choose an embedding ("OpenAI" or "instructor-xl")
+# embeddings_type = "instructor-xl"
+embeddings_type = "OpenAI"
+embeddings = None
 #? Notes: 
 #? the faiss_index folder is used to store the embeddings of the text chunks, so that I dont need to calculate the embeddings every time I run the code. But this is for static testing purposes, in a real world scenario, the embeddings should be calculated every time, because the text chunks will be different every time.
 #? if you used an embeddings different than the one used to create the cashed faiss_index folder, you will get an error, because the embeddings are not the same. 
@@ -19,6 +24,27 @@ import random
 static_testing = False
 api_key = os.getenv("OPENAI_API_KEY")
 
+def get_random_substring(s, y):
+    if y > len(s): 
+        raise ValueError("Substring length cannot be greater than string length.")
+    
+    start_idx = random.randint(0, len(s) - y)
+    return s[start_idx:start_idx + y]
+
+def load_embeddings():
+    """Load the embeddings based on the specified type."""
+    global embeddings
+    start_time = time.time()
+    if embeddings_type == "OpenAI":
+        embeddings = OpenAIEmbeddings()
+    elif embeddings_type == "instructor-xl":
+        embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
+    else:
+        ValueError("Invalid embeddings type. Please choose 'OpenAI' or 'instructor-xl'.")
+    end_time = time.time()
+    print(f"Loaded embedding model in {end_time - start_time} seconds.")
+    
+    
 def get_pdf_text(pdf_docs):
     """Extract text from the uploaded PDFs."""
     text = ""
@@ -32,8 +58,8 @@ def get_text_chunks(text):
     """Split the extracted text into chunks."""
     text_splitter = CharacterTextSplitter(
         separator="\n",
-        chunk_size=1000,
-        chunk_overlap=200,
+        chunk_size=500, #1000
+        chunk_overlap=100, #200
         length_function=len
     )
     chunks = text_splitter.split_text(text)
@@ -41,31 +67,38 @@ def get_text_chunks(text):
 
 def get_vectorstore(text_chunks):
     """Create a vector store from the text chunks."""
-    embeddings = OpenAIEmbeddings()
+    load_embeddings()
+    print("number of chunks {} chunks sizes: {}".format(len(text_chunks), [len(chunk) for chunk in text_chunks]))
+    start_time = time.time()
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
+    end_time = time.time()
+    print(f"Running the embedding took: {end_time - start_time:.4f} seconds")
     return vectorstore
 
 def save_vectorstore(vectorstore, directory="faiss_index"):
     """Save the FAISS vectorstore to a directory."""
-    if not os.path.exists(directory) and static_testing:
+    if not static_testing:
+        return
+    if not os.path.exists(directory):
         os.makedirs(directory)
     vectorstore.save_local(directory)
     print(f"Vectorstore saved to {directory}")
 
 def load_vectorstore(directory="faiss_index"):
-    # this is for static testing purposes, in a real world scenario, the embeddings should be calculated every time, because the text chunks will be different every time.
+    # this is for static testing purposes (save money and time), in a real world scenario, the embeddings should be calculated every time, because the text chunks will be different every time.
     """Load the FAISS vectorstore from the directory."""
-    if os.path.exists(directory) and static_testing:
-        # embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl") # this is soo slow
-        embeddings = OpenAIEmbeddings()
+    if not static_testing:
+        return
+    if os.path.exists(directory):
+        load_embeddings()
         vectorstore = FAISS.load_local(directory, embeddings=embeddings)
         print(f"Vectorstore loaded from {directory}")
         return vectorstore
     else:
         return None
-
-def generate_mcq_question_embedding(chunk, vectorstore):
-    """Generate a multiple-choice question based on the text chunk using the embedding."""
+        
+def generate_mcq_question_embedding(chunk, vectorstore, max_retries=3, retry_delay=2):
+    """Generate a multiple-choice question based on the text chunk using the embedding with retries."""
     similar_docs = vectorstore.similarity_search(chunk, k=3)
     context = "\n".join([doc.page_content for doc in similar_docs])
 
@@ -83,26 +116,41 @@ def generate_mcq_question_embedding(chunk, vectorstore):
 
     llm = ChatOpenAI(openai_api_key=api_key, verbose=True)
     messages = [HumanMessage(content=question_prompt)]
-    
-    try:
-        response = llm(messages)
-        generated_content = response.content.strip()
-        
-        pattern = r"Question:\s*(.*?)\nA\.\s*(.*?)\nB\.\s*(.*?)\nC\.\s*(.*?)\nD\.\s*(.*?)\nCorrect Answer:\s*(.*)"
-        match = re.search(pattern, generated_content, re.DOTALL)
 
-        if match:
-            question = match.group(1).strip()
-            options = [match.group(i).strip() for i in range(2, 6)]
-            correct_answer = match.group(6).strip()
-            return question, correct_answer[3:], options
-        else:
-            print("Error: Unable to parse the generated question format.")
-            return None, None, None
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            # Generate response from the model
+            response = llm(messages)
+            generated_content = response.content.strip()
+            
+            # Parse the response
+            pattern = r"Question:\s*(.*?)\nA\.\s*(.*?)\nB\.\s*(.*?)\nC\.\s*(.*?)\nD\.\s*(.*?)\nCorrect Answer:\s*(.*)"
+            match = re.search(pattern, generated_content, re.DOTALL)
 
-    except Exception as e:
-        print(f"Error generating the question: {e}")
-        return None, None, None
+            if match:
+                question = match.group(1).strip()
+                options = [match.group(i).strip() for i in range(2, 6)]
+                correct_answer = match.group(6).strip()
+                return question, correct_answer[3:], options
+            else:
+                print("Error: Unable to parse the generated question format.")
+                return None, None, None
+
+        except Exception as e:
+            print(f"Attempt {attempt + 1} failed: {e}")
+            attempt += 1
+            if attempt < max_retries:
+                print(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+            else:
+                print("Max retries reached. Returning None.")
+                return None, None, None
+
+    # If we exit the loop, all attempts failed
+    print("Failed to generate a valid question after multiple attempts.")
+    return None, None, None
+
 
 def generate_mcq_question_text(chunk):
     """Generate a multiple-choice question based on the text chunk without using the embedding."""
@@ -183,8 +231,15 @@ def main():
                 st.session_state.vectorstore = vectorstore
                 
                 current_chunk = text_chunks[random.randint(0, len(text_chunks)-1)]
-                question_embedding, correct_answer_embedding, options_embedding = generate_mcq_question_embedding(current_chunk, vectorstore)
-                question_text, correct_answer_text, options_text = generate_mcq_question_text(current_chunk)
+                # random substring of length 50
+                random_substring = get_random_substring(current_chunk, 50)
+
+                print(random_substring)
+                print(len(random_substring))
+                st.write("GIVEN TEXT len:", len(random_substring))
+                st.write("GIVEN TEXT: ", random_substring)
+                question_embedding, correct_answer_embedding, options_embedding = generate_mcq_question_embedding(random_substring, vectorstore)
+                question_text, correct_answer_text, options_text = generate_mcq_question_text(random_substring)
                 
                 st.session_state.current_question_embedding = (question_embedding, correct_answer_embedding, options_embedding)
                 st.session_state.current_question_text = (question_text, correct_answer_text, options_text)
