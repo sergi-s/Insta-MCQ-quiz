@@ -201,7 +201,7 @@ def handle_userinput(user_answer, correct_answer):
 
 def main():
     load_dotenv()
-    st.set_page_config(page_title="Chat with multiple PDFs", page_icon=":books:")
+    st.set_page_config(page_title="Insta MCQ generator", page_icon=":books:")
 
     if "current_question_embedding" not in st.session_state:
         st.session_state.current_question_embedding = None
@@ -210,7 +210,7 @@ def main():
     if "text_chunks" not in st.session_state:
         st.session_state.text_chunks = None
 
-    st.header("Chat with multiple PDFs :books:")
+    st.header("Insta MCQ generator :books:")
     
     with st.sidebar:
         st.subheader("Your documents")
