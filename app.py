@@ -250,17 +250,24 @@ def main():
         question_embedding, correct_answer_embedding, options_embedding = st.session_state.current_question_embedding
         question_text, correct_answer_text, options_text = st.session_state.current_question_text
         
-        st.write("Question generated using embedding:")
-        st.write(question_embedding)
-        user_answer_embedding = st.radio("Select an option", options_embedding)
-        if st.button("Submit Answer (Embedding)"):
-            handle_userinput(user_answer_embedding, correct_answer_embedding)
+        # Create two columns for side-by-side layout
+        col1, col2 = st.columns(2)
+
+        # Embedding-based question in the first column
+        with col1:
+            st.write("Question generated using embedding:")
+            st.write(question_embedding)
+            user_answer_embedding = st.radio("Select an option", options_embedding)
+            if st.button("Submit Answer (Embedding)"):
+                handle_userinput(user_answer_embedding, correct_answer_embedding)
         
-        st.write("Question generated using text:")
-        st.write(question_text)
-        user_answer_text = st.radio("Select an option", options_text)
-        if st.button("Submit Answer (Text)"):
-            handle_userinput(user_answer_text, correct_answer_text)
+        # Text-based question in the second column
+        with col2:
+            st.write("Question generated using text:")
+            st.write(question_text)
+            user_answer_text = st.radio("Select an option", options_text)
+            if st.button("Submit Answer (Text)"):
+                handle_userinput(user_answer_text, correct_answer_text)
     
     if st.button("Next"):
             with st.spinner("Loading next question..."):
@@ -270,10 +277,9 @@ def main():
                 st.session_state.current_question_text = generate_mcq_question_text(current_chunk)
                 
                     
-                if not st.session_state.current_question_embedding or  not st.session_state.current_question_text: 
-                  st.warning("Could not generate the question, trying again...")
+                if not st.session_state.current_question_embedding or not st.session_state.current_question_text: 
+                    st.warning("Could not generate the question, trying again...")
                 st.experimental_rerun()
-
 
 if __name__ == '__main__':
     main()
